@@ -1,49 +1,26 @@
-/**
- * Game.cpp —— 游戏主控制类的实现
- *
- * 游戏流程：
- *   1. 构造时默认为 PvP 模式
- *   2. 每帧调用 Update 处理 AI 延迟走棋
- *   3. HandleClick 处理鼠标点击 → 人类落子 → 检查胜负 → 切换玩家
- *   4. PvE 模式下，人类落子后启动 AI 延迟计数器，延迟结束后 AI 自动走棋
- *
- * 模式切换：
- *   - 按 1 键：切换到 PvP 模式并重置
- *   - 按 2 键：切换到 PvE 模式并重置
- *   - 按 R 键：以当前模式重置棋盘
- */
-
 #include "Game.h"
+
+static const int SPRITE_FRAME_DELAY = 15;
 
 Game::Game()
 {
-    Reset(MODE_PVP);
+    Reset();
 }
 
 Game::~Game() {}
 
-void Game::Reset(GameMode mode)
+void Game::Reset()
 {
     board.Reset();
-    gameMode = mode;
     gameState = STATE_PLAYING;
     currentPlayer = CELL_X;
     aiDelay = 0;
+    aiSpriteAnim = AISA_IDLE;
+    aiSpriteFrame = 0;
+    aiSpriteTimer = 0;
 
     playerX = std::make_unique<HumanPlayer>(CELL_X);
-    if (mode == MODE_PVE)
-    {
-        playerO = std::make_unique<AIPlayer>(CELL_O);
-    }
-    else
-    {
-        playerO = std::make_unique<HumanPlayer>(CELL_O);
-    }
-}
-
-void Game::SetMode(GameMode mode)
-{
-    Reset(mode);
+    playerO = std::make_unique<AIPlayer>(CELL_O);
 }
 
 void Game::HandleClick(int mx, int my, int gridX, int gridY, int cellSize)
@@ -51,7 +28,6 @@ void Game::HandleClick(int mx, int my, int gridX, int gridY, int cellSize)
     if (gameState != STATE_PLAYING)
         return;
 
-    /* 获取当前回合的人类玩家指针（AI 回合忽略鼠标点击） */
     HumanPlayer *human = dynamic_cast<HumanPlayer *>(
         (currentPlayer == CELL_X) ? playerX.get() : playerO.get());
     if (!human)
@@ -65,10 +41,12 @@ void Game::HandleClick(int mx, int my, int gridX, int gridY, int cellSize)
     board.Set(move.row, move.col, currentPlayer);
     CheckGameOver();
 
-    /* 若未结束且为 PvE 模式，启动 AI 延迟（视觉效果） */
-    if (gameState == STATE_PLAYING && gameMode == MODE_PVE)
+    if (gameState == STATE_PLAYING)
     {
         aiDelay = 15;
+        aiSpriteAnim = AISA_MAKE_MOVE;
+        aiSpriteFrame = 0;
+        aiSpriteTimer = 0;
     }
 }
 
@@ -78,14 +56,23 @@ void Game::CheckGameOver()
     if (winner == CELL_X)
     {
         gameState = STATE_X_WIN;
+        aiSpriteAnim = AISA_SAD;
+        aiSpriteFrame = 0;
+        aiSpriteTimer = 0;
     }
     else if (winner == CELL_O)
     {
         gameState = STATE_O_WIN;
+        aiSpriteAnim = AISA_CHEER;
+        aiSpriteFrame = 0;
+        aiSpriteTimer = 0;
     }
     else if (board.IsFull())
     {
         gameState = STATE_DRAW;
+        aiSpriteAnim = AISA_SAD;
+        aiSpriteFrame = 0;
+        aiSpriteTimer = 0;
     }
     else
     {
@@ -100,14 +87,13 @@ void Game::SwitchPlayer()
 
 void Game::Update()
 {
+    AdvanceAnimFrame();
+
     if (gameState != STATE_PLAYING)
-        return;
-    if (gameMode != MODE_PVE)
         return;
     if (currentPlayer != CELL_O)
         return;
 
-    /* AI 延迟倒计时，模拟"思考"过程 */
     if (aiDelay > 0)
     {
         aiDelay--;
@@ -125,10 +111,27 @@ void Game::DoAIMove()
 
     board.Set(move.row, move.col, CELL_O);
     CheckGameOver();
+
+    if (gameState == STATE_PLAYING)
+    {
+        aiSpriteAnim = AISA_IDLE;
+        aiSpriteFrame = 0;
+        aiSpriteTimer = 0;
+    }
 }
 
-GameMode Game::GetMode() const { return gameMode; }
+void Game::AdvanceAnimFrame()
+{
+    if (++aiSpriteTimer >= SPRITE_FRAME_DELAY)
+    {
+        aiSpriteTimer = 0;
+        aiSpriteFrame = (aiSpriteFrame + 1) % 5;
+    }
+}
+
 GameState Game::GetState() const { return gameState; }
 Cell Game::GetCurrentPlayer() const { return currentPlayer; }
 const Board &Game::GetBoard() const { return board; }
 int Game::GetAIDelay() const { return aiDelay; }
+AISpriteAnim Game::GetAISpriteAnim() const { return aiSpriteAnim; }
+int Game::GetAISpriteFrame() const { return aiSpriteFrame; }
