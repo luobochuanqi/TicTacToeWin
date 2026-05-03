@@ -2,21 +2,25 @@
 #include "lib/GameLib.h"
 #include "src/Game.h"
 
-/** 窗口宽度 */
 const int WIN_W = 640;
-/** 窗口高度 */
 const int WIN_H = 480;
-/** 每个格子的像素大小 */
 const int CELL = 100;
 
-/** 棋盘左上角 X 坐标 */
 const int GRID_X = 70;
-/** 棋盘左上角 Y 坐标 */
 const int GRID_Y = 70;
 
-/** Kirby 绘制尺寸（缩放后） */
 const int KIRBY_DW = 180;
 const int KIRBY_DH = 200;
+
+static wchar_t assetDir[MAX_PATH];
+
+static void GetAssetPath(const wchar_t *filename, char *out, int outSize)
+{
+    wchar_t wpath[MAX_PATH];
+    wcscpy(wpath, assetDir);
+    wcscat(wpath, filename);
+    WideCharToMultiByte(CP_UTF8, 0, wpath, -1, out, outSize, NULL, NULL);
+}
 
 static void DrawGrid(GameLib &gl)
 {
@@ -29,7 +33,7 @@ static void DrawGrid(GameLib &gl)
     }
 }
 
-static void DrawMark(GameLib &gl, int row, int col, Cell cell)
+static void DrawMark(GameLib &gl, int row, int col, Cell cell, int starSprite)
 {
     int cx = GRID_X + col * CELL + CELL / 2;
     int cy = GRID_Y + row * CELL + CELL / 2;
@@ -41,20 +45,25 @@ static void DrawMark(GameLib &gl, int row, int col, Cell cell)
         gl.DrawLine(cx - off, cy - off, cx + off, cy + off, COLOR_SKY_BLUE);
         gl.DrawLine(cx + off, cy - off, cx - off, cy + off, COLOR_SKY_BLUE);
     }
+    else if (starSprite >= 0)
+    {
+        int sz = CELL * 2 / 3;
+        gl.DrawSpriteScaled(starSprite, cx - sz / 2, cy - sz / 2, sz, sz, SPRITE_ALPHA);
+    }
     else
     {
         gl.DrawCircle(cx, cy, r, COLOR_GOLD);
     }
 }
 
-static void DrawBoard(GameLib &gl, const Board &board)
+static void DrawBoard(GameLib &gl, const Board &board, int starSprite)
 {
     for (int r = 0; r < BOARD_SIZE; ++r)
         for (int c = 0; c < BOARD_SIZE; ++c)
         {
             Cell cell = board.Get(r, c);
             if (cell != CELL_EMPTY)
-                DrawMark(gl, r, c, cell);
+                DrawMark(gl, r, c, cell, starSprite);
         }
 }
 
@@ -65,25 +74,62 @@ int main()
 
     Game game;
 
-    // 从 exe 所在目录反推项目根目录，无论从哪里启动都能找到素材
-    wchar_t exePath[MAX_PATH];
-    GetModuleFileNameW(NULL, exePath, MAX_PATH);
-    wchar_t *lastSep = wcsrchr(exePath, L'\\');
-    if (lastSep) *lastSep = L'\0';                 // 去掉 exe 文件名
-    if (lastSep) lastSep = wcsrchr(exePath, L'\\');
-    if (lastSep) *lastSep = L'\0';                 // 再上一级 → 项目根目录
-    wcscat(exePath, L"\\assets\\sprites\\Kirby.png");
+    GetModuleFileNameW(NULL, assetDir, MAX_PATH);
+    wchar_t *lastSep = wcsrchr(assetDir, L'\\');
+    if (lastSep) *lastSep = L'\0';
+    if (lastSep) lastSep = wcsrchr(assetDir, L'\\');
+    if (lastSep) *lastSep = L'\0';
+    wcscat(assetDir, L"\\assets\\sprites\\");
 
-    char kirbyPath[MAX_PATH];
-    WideCharToMultiByte(CP_UTF8, 0, exePath, -1, kirbyPath, MAX_PATH, NULL, NULL);
-    int kirby = gl.LoadSprite(kirbyPath);
+    char buf[MAX_PATH];
+
+    GetAssetPath(L"kirby.png", buf, sizeof(buf));
+    int kirby = gl.LoadSprite(buf);
     int kirbyFW = (kirby >= 0) ? gl.GetSpriteWidth(kirby) / 5 : 0;
     int kirbyFH = (kirby >= 0) ? gl.GetSpriteHeight(kirby) / 4 : 0;
 
+    GetAssetPath(L"open.png", buf, sizeof(buf));
+    int splash = gl.LoadSprite(buf);
+
+    GetAssetPath(L"star.png", buf, sizeof(buf));
+    int star = gl.LoadSprite(buf);
+
     gl.ShowFps(true);
+
+    int splashPhase = 0;
+    int splashTimer = 0;
 
     while (!gl.IsClosed())
     {
+        /* ---------- 开场动画 ---------- */
+        if (splashPhase < 2)
+        {
+            if (splash >= 0)
+                gl.DrawSpriteScaled(splash, 0, 0, WIN_W, WIN_H, SPRITE_ALPHA);
+
+            if (splashPhase == 0)
+            {
+                if (++splashTimer >= 60)
+                {
+                    splashPhase = 1;
+                    splashTimer = 0;
+                }
+            }
+            else
+            {
+                splashTimer += 5;
+                if (splashTimer < 255)
+                    gl.FillRect(0, 0, WIN_W, WIN_H, COLOR_ARGB(splashTimer, 255, 255, 255));
+                else
+                    splashPhase = 2;
+            }
+
+            gl.Update();
+            gl.WaitFrame(60);
+            continue;
+        }
+
+        /* ---------- 正常游戏 ---------- */
         if (gl.IsKeyPressed(KEY_R))
             game.Reset();
 
@@ -93,12 +139,10 @@ int main()
 
         game.Update();
 
-        /* --- 渲染 --- */
         gl.Clear(COLOR_WHITE);
         DrawGrid(gl);
-        DrawBoard(gl, game.GetBoard());
+        DrawBoard(gl, game.GetBoard(), star);
 
-        /* --- 绘制 Kirby 精灵 --- */
         if (kirby >= 0)
         {
             int frameIndex = (int)game.GetAISpriteAnim() * 5 + game.GetAISpriteFrame();
@@ -106,10 +150,9 @@ int main()
             int spriteY = GRID_Y;
             gl.DrawSpriteFrameScaled(kirby, spriteX, spriteY,
                                      kirbyFW, kirbyFH, frameIndex,
-                                     KIRBY_DW, KIRBY_DH,                                      SPRITE_ALPHA);
+                                     KIRBY_DW, KIRBY_DH, SPRITE_ALPHA);
         }
 
-        /* --- 显示游戏状态信息 --- */
         GameState state = game.GetState();
         if (state == STATE_PLAYING)
         {
@@ -154,7 +197,8 @@ int main()
         gl.WaitFrame(60);
     }
 
-    if (kirby >= 0)
-        gl.FreeSprite(kirby);
+    if (kirby >= 0) gl.FreeSprite(kirby);
+    if (splash >= 0) gl.FreeSprite(splash);
+    if (star >= 0) gl.FreeSprite(star);
     return 0;
 }
