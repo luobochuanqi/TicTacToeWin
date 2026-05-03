@@ -1,6 +1,6 @@
 #include "Game.h"
 
-static const int SPRITE_FRAME_DELAY = 15;
+static const int SPRITE_FRAME_DELAY = 10;
 
 Game::Game()
 {
@@ -43,7 +43,7 @@ void Game::HandleClick(int mx, int my, int gridX, int gridY, int cellSize)
 
     if (gameState == STATE_PLAYING)
     {
-        aiDelay = 15;
+        aiDelay = 5 * SPRITE_FRAME_DELAY;
         aiSpriteAnim = AISA_MAKE_MOVE;
         aiSpriteFrame = 0;
         aiSpriteTimer = 0;
@@ -100,6 +100,9 @@ void Game::Update()
         return;
     }
 
+    if (aiSpriteAnim == AISA_MAKE_MOVE)
+        return;
+
     DoAIMove();
 }
 
@@ -126,6 +129,9 @@ void Game::AdvanceAnimFrame()
     {
         aiSpriteTimer = 0;
         aiSpriteFrame = (aiSpriteFrame + 1) % 5;
+
+        if (aiSpriteAnim == AISA_MAKE_MOVE && aiSpriteFrame == 0)
+            aiSpriteAnim = AISA_IDLE;
     }
 }
 

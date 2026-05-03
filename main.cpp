@@ -23,9 +23,9 @@ static void DrawGrid(GameLib &gl)
     for (int i = 1; i < BOARD_SIZE; ++i)
     {
         int x = GRID_X + i * CELL;
-        gl.DrawLine(x, GRID_Y, x, GRID_Y + BOARD_SIZE * CELL, COLOR_WHITE);
+        gl.DrawLine(x, GRID_Y, x, GRID_Y + BOARD_SIZE * CELL, COLOR_BLACK);
         int y = GRID_Y + i * CELL;
-        gl.DrawLine(GRID_X, y, GRID_X + BOARD_SIZE * CELL, y, COLOR_WHITE);
+        gl.DrawLine(GRID_X, y, GRID_X + BOARD_SIZE * CELL, y, COLOR_BLACK);
     }
 }
 
@@ -65,7 +65,18 @@ int main()
 
     Game game;
 
-    int kirby = gl.LoadSprite("assets/sprites/Kirby.png");
+    // 从 exe 所在目录反推项目根目录，无论从哪里启动都能找到素材
+    wchar_t exePath[MAX_PATH];
+    GetModuleFileNameW(NULL, exePath, MAX_PATH);
+    wchar_t *lastSep = wcsrchr(exePath, L'\\');
+    if (lastSep) *lastSep = L'\0';                 // 去掉 exe 文件名
+    if (lastSep) lastSep = wcsrchr(exePath, L'\\');
+    if (lastSep) *lastSep = L'\0';                 // 再上一级 → 项目根目录
+    wcscat(exePath, L"\\assets\\sprites\\Kirby.png");
+
+    char kirbyPath[MAX_PATH];
+    WideCharToMultiByte(CP_UTF8, 0, exePath, -1, kirbyPath, MAX_PATH, NULL, NULL);
+    int kirby = gl.LoadSprite(kirbyPath);
     int kirbyFW = (kirby >= 0) ? gl.GetSpriteWidth(kirby) / 5 : 0;
     int kirbyFH = (kirby >= 0) ? gl.GetSpriteHeight(kirby) / 4 : 0;
 
@@ -83,7 +94,7 @@ int main()
         game.Update();
 
         /* --- 渲染 --- */
-        gl.Clear(COLOR_BLACK);
+        gl.Clear(COLOR_WHITE);
         DrawGrid(gl);
         DrawBoard(gl, game.GetBoard());
 
@@ -105,39 +116,40 @@ int main()
             Cell cur = game.GetCurrentPlayer();
             const char *name = (cur == CELL_X) ? "X" : "O";
             uint32_t col = (cur == CELL_X) ? COLOR_SKY_BLUE : COLOR_GOLD;
-            gl.DrawText(10, 10, "Turn: ", COLOR_WHITE);
-            gl.DrawText(58, 10, name, col);
+            gl.DrawTextFont(10, 8, "\xe5\x9b\x9e\xe5\x90\x88: ", COLOR_BLACK, 16);
+            gl.DrawTextFont(58, 8, name, col, 16);
 
             if (cur == CELL_O)
-                gl.DrawText(80, 10, "- AI thinking...", COLOR_GRAY);
+                gl.DrawTextFont(80, 8, "- AI \xe6\x80\x9d\xe8\x80\x83\xe4\xb8\xad...", COLOR_DARK_GRAY, 16);
             else
-                gl.DrawText(80, 10, "- click a cell", COLOR_GRAY);
+                gl.DrawTextFont(80, 8, "- \xe7\x82\xb9\xe5\x87\xbb\xe6\xa0\xbc\xe5\xad\x90\xe8\x90\xbd\xe5\xad\x90", COLOR_DARK_GRAY, 16);
         }
         else
         {
             const char *msg;
             uint32_t col;
+            int fontSize = 24;
             if (state == STATE_X_WIN)
             {
-                msg = "You win!";
+                msg = "\xe4\xbd\xa0\xe8\xb5\xa2\xe4\xba\x86!";
                 col = COLOR_SKY_BLUE;
             }
             else if (state == STATE_O_WIN)
             {
-                msg = "Kirby wins!";
+                msg = "\xe5\x8d\xa1\xe6\xaf\x94\xe8\xb5\xa2\xe4\xba\x86!";
                 col = COLOR_GOLD;
             }
             else
             {
-                msg = "Draw!";
-                col = COLOR_GRAY;
+                msg = "\xe5\xb9\xb3\xe5\xb1\x80!";
+                col = COLOR_DARK_GRAY;
             }
 
-            int tw = 8 * (int)strlen(msg);
-            gl.DrawText((WIN_W - tw) / 2, GRID_Y + BOARD_SIZE * CELL + 30, msg, col);
+            int tw = gl.GetTextWidthFont(msg, fontSize);
+            gl.DrawTextFont((WIN_W - tw) / 2, GRID_Y + BOARD_SIZE * CELL + 24, msg, col, fontSize);
         }
 
-        gl.DrawText(10, WIN_H - 20, "R = restart", COLOR_DARK_GRAY);
+        gl.DrawTextFont(10, WIN_H - 22, "\xe6\x8c\x89 R \xe9\x87\x8d\xe6\x96\xb0\xe5\xbc\x80\xe5\xa7\x8b", COLOR_DARK_GRAY, 14);
         gl.Update();
         gl.WaitFrame(60);
     }
