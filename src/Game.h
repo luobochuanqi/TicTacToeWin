@@ -22,7 +22,8 @@ enum AISpriteAnim
     AISA_MAKE_MOVE,
     AISA_IDLE,
     AISA_CHEER,
-    AISA_SAD
+    AISA_SAD,
+    AISA_MOVE_ANIM
 };
 
 class Game
@@ -41,6 +42,10 @@ public:
     int GetAIDelay() const;
     AISpriteAnim GetAISpriteAnim() const;
     int GetAISpriteFrame() const;
+    WinLine GetWinLine() const;
+    Move GetPendingAIMove() const;
+    int GetAnimProgress() const;
+    bool IsAIMoveAnimating() const;
 
 private:
     void SwitchPlayer();
@@ -58,6 +63,10 @@ private:
     AISpriteAnim aiSpriteAnim;
     int aiSpriteFrame;
     int aiSpriteTimer;
+
+    Move pendingAIMove;
+    int animProgress;
+    static const int ANIM_TOTAL_FRAMES = 25;
 };
 
 #endif

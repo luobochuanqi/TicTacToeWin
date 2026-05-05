@@ -73,3 +73,27 @@ Cell Board::CheckWinner() const
         return grid[0][2];
     return CELL_EMPTY;
 }
+
+WinLine Board::GetWinLine() const
+{
+    for (int i = 0; i < BOARD_SIZE; ++i)
+    {
+        if (grid[i][0] != CELL_EMPTY &&
+            grid[i][0] == grid[i][1] &&
+            grid[i][1] == grid[i][2])
+            return { grid[i][0], i, 0, i, 2 };
+        if (grid[0][i] != CELL_EMPTY &&
+            grid[0][i] == grid[1][i] &&
+            grid[1][i] == grid[2][i])
+            return { grid[0][i], 0, i, 2, i };
+    }
+    if (grid[0][0] != CELL_EMPTY &&
+        grid[0][0] == grid[1][1] &&
+        grid[1][1] == grid[2][2])
+        return { grid[0][0], 0, 0, 2, 2 };
+    if (grid[0][2] != CELL_EMPTY &&
+        grid[0][2] == grid[1][1] &&
+        grid[1][1] == grid[2][0])
+        return { grid[0][2], 0, 2, 2, 0 };
+    return { CELL_EMPTY, 0, 0, 0, 0 };
+}

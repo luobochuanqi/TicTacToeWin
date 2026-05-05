@@ -18,6 +18,8 @@ void Game::Reset()
     aiSpriteAnim = AISA_IDLE;
     aiSpriteFrame = 0;
     aiSpriteTimer = 0;
+    pendingAIMove = Move();
+    animProgress = 0;
 
     playerX = std::make_unique<HumanPlayer>(CELL_X);
     playerO = std::make_unique<AIPlayer>(CELL_O);
@@ -87,7 +89,27 @@ void Game::SwitchPlayer()
 
 void Game::Update()
 {
-    AdvanceAnimFrame();
+    if (aiSpriteAnim != AISA_MOVE_ANIM)
+        AdvanceAnimFrame();
+
+    if (aiSpriteAnim == AISA_MOVE_ANIM)
+    {
+        animProgress++;
+        if (animProgress >= ANIM_TOTAL_FRAMES)
+        {
+            board.Set(pendingAIMove.row, pendingAIMove.col, CELL_O);
+            CheckGameOver();
+            animProgress = 0;
+            pendingAIMove = Move();
+            if (gameState == STATE_PLAYING)
+            {
+                aiSpriteAnim = AISA_IDLE;
+                aiSpriteFrame = 0;
+                aiSpriteTimer = 0;
+            }
+        }
+        return;
+    }
 
     if (gameState != STATE_PLAYING)
         return;
@@ -112,15 +134,9 @@ void Game::DoAIMove()
     if (!move.IsValid())
         return;
 
-    board.Set(move.row, move.col, CELL_O);
-    CheckGameOver();
-
-    if (gameState == STATE_PLAYING)
-    {
-        aiSpriteAnim = AISA_IDLE;
-        aiSpriteFrame = 0;
-        aiSpriteTimer = 0;
-    }
+    pendingAIMove = move;
+    aiSpriteAnim = AISA_MOVE_ANIM;
+    animProgress = 0;
 }
 
 void Game::AdvanceAnimFrame()
@@ -141,3 +157,7 @@ const Board &Game::GetBoard() const { return board; }
 int Game::GetAIDelay() const { return aiDelay; }
 AISpriteAnim Game::GetAISpriteAnim() const { return aiSpriteAnim; }
 int Game::GetAISpriteFrame() const { return aiSpriteFrame; }
+WinLine Game::GetWinLine() const { return board.GetWinLine(); }
+Move Game::GetPendingAIMove() const { return pendingAIMove; }
+int Game::GetAnimProgress() const { return animProgress; }
+bool Game::IsAIMoveAnimating() const { return aiSpriteAnim == AISA_MOVE_ANIM; }

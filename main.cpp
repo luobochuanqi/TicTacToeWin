@@ -22,6 +22,42 @@ static void GetAssetPath(const wchar_t *filename, char *out, int outSize)
     WideCharToMultiByte(CP_UTF8, 0, wpath, -1, out, outSize, NULL, NULL);
 }
 
+static int CreateXSprite(GameLib &gl)
+{
+    int id = gl.CreateSprite(CELL, CELL);
+    if (id < 0) return -1;
+
+    int t = CELL / 8;
+    for (int y = 0; y < CELL; ++y)
+    {
+        for (int x = 0; x < CELL; ++x)
+        {
+            bool onDiag1 = (abs(x - y) <= t);
+            bool onDiag2 = (abs(x + y - (CELL - 1)) <= t);
+            uint32_t color = (onDiag1 || onDiag2) ? COLOR_SKY_BLUE : COLOR_TRANSPARENT;
+            gl.SetSpritePixel(id, x, y, color);
+        }
+    }
+    return id;
+}
+
+static void DrawThickLine(GameLib &gl, int x1, int y1, int x2, int y2, uint32_t color, int thickness)
+{
+    float dx = (float)(x2 - x1);
+    float dy = (float)(y2 - y1);
+    float len = sqrtf(dx * dx + dy * dy);
+    if (len < 1.0f) return;
+    float px = -dy / len;
+    float py = dx / len;
+
+    for (int i = -thickness / 2; i <= thickness / 2; ++i)
+    {
+        int ox = (int)(px * i + 0.5f);
+        int oy = (int)(py * i + 0.5f);
+        gl.DrawLine(x1 + ox, y1 + oy, x2 + ox, y2 + oy, color);
+    }
+}
+
 static void DrawGrid(GameLib &gl)
 {
     for (int i = 1; i < BOARD_SIZE; ++i)
@@ -33,44 +69,162 @@ static void DrawGrid(GameLib &gl)
     }
 }
 
-static void DrawMark(GameLib &gl, int row, int col, Cell cell, int starSprite)
+static void DrawMark(GameLib &gl, int row, int col, Cell cell, int xSprite, int starSprite)
 {
     int cx = GRID_X + col * CELL + CELL / 2;
     int cy = GRID_Y + row * CELL + CELL / 2;
-    int r = CELL / 3;
+    int sz = CELL * 2 / 3;
 
-    if (cell == CELL_X)
+    if (cell == CELL_X && xSprite >= 0)
     {
-        int off = (int)(r * 0.7f);
-        gl.DrawLine(cx - off, cy - off, cx + off, cy + off, COLOR_SKY_BLUE);
-        gl.DrawLine(cx + off, cy - off, cx - off, cy + off, COLOR_SKY_BLUE);
+        gl.DrawSpriteScaled(xSprite, cx - sz / 2, cy - sz / 2, sz, sz, SPRITE_ALPHA);
     }
-    else if (starSprite >= 0)
+    else if (cell == CELL_O && starSprite >= 0)
     {
-        int sz = CELL * 2 / 3;
         gl.DrawSpriteScaled(starSprite, cx - sz / 2, cy - sz / 2, sz, sz, SPRITE_ALPHA);
-    }
-    else
-    {
-        gl.DrawCircle(cx, cy, r, COLOR_GOLD);
     }
 }
 
-static void DrawBoard(GameLib &gl, const Board &board, int starSprite)
+static void DrawBoard(GameLib &gl, const Board &board, int xSprite, int starSprite)
 {
     for (int r = 0; r < BOARD_SIZE; ++r)
         for (int c = 0; c < BOARD_SIZE; ++c)
         {
             Cell cell = board.Get(r, c);
             if (cell != CELL_EMPTY)
-                DrawMark(gl, r, c, cell, starSprite);
+                DrawMark(gl, r, c, cell, xSprite, starSprite);
         }
+}
+
+static void DrawWinLine(GameLib &gl, const WinLine &wl)
+{
+    if (!wl.IsWin()) return;
+
+    int cx1 = GRID_X + wl.c1 * CELL + CELL / 2;
+    int cy1 = GRID_Y + wl.r1 * CELL + CELL / 2;
+    int cx2 = GRID_X + wl.c2 * CELL + CELL / 2;
+    int cy2 = GRID_Y + wl.r2 * CELL + CELL / 2;
+
+    uint32_t color = (wl.winner == CELL_X) ? COLOR_SKY_BLUE : COLOR_GOLD;
+    DrawThickLine(gl, cx1, cy1, cx2, cy2, color, 5);
+}
+
+static void DrawHoverPreview(GameLib &gl, const Game &game, int xSprite, int starSprite)
+{
+    if (game.GetState() != STATE_PLAYING) return;
+    if (game.GetCurrentPlayer() != CELL_X) return;
+
+    int mx = gl.GetMouseX();
+    int my = gl.GetMouseY();
+    int col = (mx - GRID_X) / CELL;
+    int row = (my - GRID_Y) / CELL;
+
+    if (row < 0 || row >= BOARD_SIZE || col < 0 || col >= BOARD_SIZE) return;
+    if (game.GetBoard().Get(row, col) != CELL_EMPTY) return;
+
+    int cx = GRID_X + col * CELL + CELL / 2;
+    int cy = GRID_Y + row * CELL + CELL / 2;
+    int sz = CELL * 2 / 3;
+    uint32_t hintColor = COLOR_ARGB(90, 135, 206, 235);
+    gl.FillRect(cx - sz / 2, cy - sz / 2, sz, sz, hintColor);
+    if (xSprite >= 0)
+        gl.DrawSpriteScaled(xSprite, cx - sz / 2, cy - sz / 2, sz, sz, SPRITE_ALPHA);
+}
+
+static void DrawAIFlyingPiece(GameLib &gl, const Game &game, int starSprite)
+{
+    if (!game.IsAIMoveAnimating() || starSprite < 0) return;
+
+    Move target = game.GetPendingAIMove();
+    int progress = game.GetAnimProgress();
+    int total = 25;
+    float t = (float)progress / (float)total;
+    t = 1.0f - (1.0f - t) * (1.0f - t);
+
+    int fromX = GRID_X + BOARD_SIZE * CELL + 30 + KIRBY_DW / 2;
+    int fromY = GRID_Y + 30;
+    int toX = GRID_X + target.col * CELL + CELL / 2;
+    int toY = GRID_Y + target.row * CELL + CELL / 2;
+
+    int curX = (int)(fromX + (toX - fromX) * t);
+    int curY = (int)(fromY + (toY - fromY) * t);
+
+    int startSz = CELL / 3;
+    int endSz = CELL * 2 / 3;
+    int sz = (int)(startSz + (endSz - startSz) * t);
+
+    gl.DrawSpriteScaled(starSprite, curX - sz / 2, curY - sz / 2, sz, sz, SPRITE_ALPHA);
+}
+
+static void DrawPlayAgainButton(GameLib &gl, bool &clicked)
+{
+    int btnW = 140;
+    int btnH = 34;
+    int btnX = (WIN_W - btnW) / 2;
+    int btnY = GRID_Y + BOARD_SIZE * CELL + 60;
+
+    int mx = gl.GetMouseX();
+    int my = gl.GetMouseY();
+    bool hover = gl.PointInRect(mx, my, btnX, btnY, btnW, btnH);
+
+    uint32_t bgColor = hover ? COLOR_ARGB(255, 70, 130, 220) : COLOR_SKY_BLUE;
+    gl.FillRect(btnX, btnY, btnW, btnH, bgColor);
+    gl.DrawRect(btnX - 1, btnY - 1, btnW + 2, btnH + 2, COLOR_DARK_BLUE);
+
+    const char *text = "Play Again";
+    int tw = gl.GetTextWidthFont(text, 18);
+    int th = gl.GetTextHeightFont(text, 18);
+    gl.DrawTextFont(btnX + (btnW - tw) / 2, btnY + (btnH - th) / 2, text, COLOR_WHITE, 18);
+
+    clicked = hover && gl.IsMousePressed(MOUSE_LEFT);
+}
+
+static void HandleSounds(GameLib &gl, GameState prevState, GameState curState,
+                         int prevMoveCount, int curMoveCount,
+                         bool wasAnimating, bool isAnimating,
+                         bool buttonClicked)
+{
+    if (curMoveCount > prevMoveCount && curState == STATE_PLAYING &&
+        !isAnimating && !wasAnimating)
+    {
+        gl.PlayBeep(660, 60, 1, 600);
+    }
+
+    if (!wasAnimating && isAnimating)
+    {
+        gl.PlayBeep(330, 80, 1, 600);
+    }
+
+    if (curState != prevState)
+    {
+        if (curState == STATE_X_WIN)
+        {
+            gl.PlayBeep(800, 120, 1, 800);
+            gl.PlayBeep(1000, 180, 1, 800);
+        }
+        else if (curState == STATE_O_WIN)
+        {
+            gl.PlayBeep(600, 120, 1, 800);
+            gl.PlayBeep(400, 180, 1, 800);
+        }
+        else if (curState == STATE_DRAW)
+        {
+            gl.PlayBeep(500, 100, 1, 700);
+            gl.PlayBeep(350, 100, 1, 700);
+        }
+    }
+
+    if (buttonClicked)
+    {
+        gl.PlayBeep(500, 30, 1, 500);
+    }
 }
 
 int main()
 {
     GameLib gl;
-    gl.Open(WIN_W, WIN_H, "Tic Tac Toe", true);
+    gl.Open(WIN_W, WIN_H, "Tic Tac Toe", true, true);
+    gl.AspectLock(true, COLOR_WHITE);
 
     Game game;
 
@@ -94,14 +248,19 @@ int main()
     GetAssetPath(L"star.png", buf, sizeof(buf));
     int star = gl.LoadSprite(buf);
 
+    int xSprite = CreateXSprite(gl);
+
     gl.ShowFps(true);
 
     int splashPhase = 0;
     int splashTimer = 0;
 
+    GameState prevState = STATE_PLAYING;
+    int prevMoveCount = 0;
+    bool wasAnimating = false;
+
     while (!gl.IsClosed())
     {
-        /* ---------- 开场动画 ---------- */
         if (splashPhase < 2)
         {
             if (splash >= 0)
@@ -129,7 +288,6 @@ int main()
             continue;
         }
 
-        /* ---------- 正常游戏 ---------- */
         if (gl.IsKeyPressed(KEY_R))
             game.Reset();
 
@@ -137,11 +295,21 @@ int main()
             game.HandleClick(gl.GetMouseX(), gl.GetMouseY(),
                              GRID_X, GRID_Y, CELL);
 
+        int curMoveCount = game.GetBoard().GetMoveCount();
+        bool isAnimating = game.IsAIMoveAnimating();
+
         game.Update();
 
+        GameState state = game.GetState();
         gl.Clear(COLOR_WHITE);
+
         DrawGrid(gl);
-        DrawBoard(gl, game.GetBoard(), star);
+        DrawBoard(gl, game.GetBoard(), xSprite, star);
+
+        if (!isAnimating)
+            DrawWinLine(gl, game.GetWinLine());
+
+        DrawHoverPreview(gl, game, xSprite, star);
 
         if (kirby >= 0)
         {
@@ -153,7 +321,9 @@ int main()
                                      KIRBY_DW, KIRBY_DH, SPRITE_ALPHA);
         }
 
-        GameState state = game.GetState();
+        DrawAIFlyingPiece(gl, game, star);
+
+        bool buttonClicked = false;
         if (state == STATE_PLAYING)
         {
             Cell cur = game.GetCurrentPlayer();
@@ -190,9 +360,21 @@ int main()
 
             int tw = gl.GetTextWidthFont(msg, fontSize);
             gl.DrawTextFont((WIN_W - tw) / 2, GRID_Y + BOARD_SIZE * CELL + 24, msg, col, fontSize);
+
+            DrawPlayAgainButton(gl, buttonClicked);
+            if (buttonClicked)
+                game.Reset();
         }
 
         gl.DrawTextFont(10, WIN_H - 22, "\xe6\x8c\x89 R \xe9\x87\x8d\xe6\x96\xb0\xe5\xbc\x80\xe5\xa7\x8b", COLOR_DARK_GRAY, 14);
+
+        HandleSounds(gl, prevState, state, prevMoveCount, curMoveCount,
+                     wasAnimating, isAnimating, buttonClicked);
+
+        prevState = state;
+        prevMoveCount = curMoveCount;
+        wasAnimating = isAnimating;
+
         gl.Update();
         gl.WaitFrame(60);
     }
@@ -200,5 +382,6 @@ int main()
     if (kirby >= 0) gl.FreeSprite(kirby);
     if (splash >= 0) gl.FreeSprite(splash);
     if (star >= 0) gl.FreeSprite(star);
+    if (xSprite >= 0) gl.FreeSprite(xSprite);
     return 0;
 }

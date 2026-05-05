@@ -50,6 +50,13 @@ struct Move
  *   - 提供 Reset / Get / Set 等基本操作
  *   - 提供 CheckWinner 胜负判定
  */
+struct WinLine
+{
+    Cell winner;
+    int r1, c1, r2, c2;
+    bool IsWin() const { return winner != CELL_EMPTY; }
+};
+
 class Board
 {
 public:
@@ -60,6 +67,7 @@ public:
     bool Set(int row, int col, Cell cell);
     bool IsFull() const;
     Cell CheckWinner() const;
+    WinLine GetWinLine() const;
     int GetMoveCount() const;
 
 private:
