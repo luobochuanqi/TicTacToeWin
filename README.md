@@ -30,7 +30,7 @@
 
 ### AI 思考中
 
-轮到 AI ⭐ 时，卡比会进入 "思考" 状态（含华夫饼 🍪），让决策过程更具趣味性。
+轮到 AI ⭐ 时，卡比会进入 "思考" 状态。
 
 ![AI 思考中](assets/images/place_1.png)
 
@@ -44,7 +44,7 @@
 
 ## 特性
 
-- 🎮 **PvE 对战**：玩家执 ✕，卡比 AI 执 ⭐，无平局可能性（AI 不可战胜）。
+- 🎮 **PvE 对战**：玩家执 ✕，卡比 AI 执 ⭐。
 - 🧠 **Minimax 算法**：AI 通过经典极小极大搜索做出全局最优决策。
 - 🎨 **像素风精灵动画**：`kirby.png` 图集包含「思考 / 落子 / 欢呼 / 沮丧」四个状态共 20 帧，由 `Game::Update` 按 tick 推进。
 - 🚀 **开场动画**：`open.png` 全屏淡入展示，再渐变为白屏后进入游戏。
@@ -102,7 +102,7 @@ TicTacToeWin/
 │   ├── Board.h/.cpp      # 3×3 棋盘、Cell 枚举（EMPTY / X / O）、胜负判定、Move 结构
 │   ├── Player.h          # 玩家抽象基类（纯虚 GetMove）
 │   ├── HumanPlayer.h/.cpp# 将鼠标坐标转换为 Move
-│   └── AIPlayer.h/.cpp   # Minimax 不可战胜 AI
+│   └── AIPlayer.h/.cpp   # Minimax AI
 ├── lib/
 │   └── GameLib.h         # 单头文件 Win32 GDI 游戏库（无单独编译）
 └── assets/
